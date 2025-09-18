@@ -1,0 +1,160 @@
+
+user  root;
+worker_processes  auto;
+
+daemon on;
+#pid logs/nginx.pid;
+
+#error_log  logs/error.log  info;
+
+error_log  logs/error.log info;
+
+#error_log  /dev/stdout info;
+
+events {
+    worker_connections  1024;
+}
+
+http {
+	lua_package_path '/app/mysql_proxy/lualib/?.lua;/app/mysql_proxy/nginx/mylua/?.lua;/app/mysql_proxy/lualib/?.ljbc;/app/mysql_proxy/lualib/?/init.ljbc;/app/mysql_proxy/lualib/?/init.lua;;';
+	lua_package_cpath "/app/mysql_proxy/lualib/?.so;;";
+
+	include       mime.types;
+	default_type  application/octet-stream;
+
+	server {
+		listen       1202;
+		server_name  localhost;
+
+		location /unlock_account {
+			content_by_lua_block {
+				local reader = require "deal_http_msg"
+				reader.forward_http_msg("unlock_account", true)
+			}
+		}
+		
+		location /lock_account {
+			content_by_lua_block {
+				local reader = require "deal_http_msg"
+				reader.forward_http_msg("lock_account", true)
+			}
+		}
+
+		location /add_db_control_policy {
+			content_by_lua_block {
+				local reader = require "deal_http_msg"
+				reader.forward_http_msg("add_db_control_policy", true)
+			}
+		}
+
+		location /delete_db_control_policy {
+			content_by_lua_block {
+				local reader = require "deal_http_msg"
+				reader.forward_http_msg("delete_db_control_policy", true)
+			}
+		}
+
+		location /update_db_control_policy {
+			content_by_lua_block {
+				local reader = require "deal_http_msg"
+				reader.forward_http_msg("update_db_control_policy", true)
+			}
+		}
+
+		location /get_db_current_config_info {
+			content_by_lua_block {
+				local reader = require "deal_http_msg"
+				reader.send_and_recv_msg("get_db_current_config_info")
+			}
+		}
+	}
+}
+
+stream {
+	lua_package_path '/app/mysql_proxy/lualib/?.lua;/app/mysql_proxy/nginx/mylua/?.lua;/app/mysql_proxy/lualib/?.ljbc;/app/mysql_proxy/lualib/?/init.ljbc;/app/mysql_proxy/lualib/?/init.lua;;';
+	lua_package_cpath "/app/mysql_proxy/lualib/?.so;;";
+	
+	lua_shared_dict mysql_audit_log 20m;
+	lua_shared_dict locks 10m;
+	lua_shared_dict current_db_connect_number 10m;
+
+	lua_shared_dict mysql_proxy_app_logs 100m;
+
+	lua_code_cache off;
+
+	bwda_proxy_switch off;
+	bwda_proxy_sm4_switch off;
+
+	init_by_lua_block {
+		local cfgreader = require "init"
+		local cfg_file = "/app/mysql_proxy/nginx/mylua/global_config.json"
+		cfgreader.get_global_cfg(cfg_file)
+
+		-- ngx.log(ngx.INFO, "lua package.path: ", package.path)
+		-- ngx.log(ngx.INFO, "lua package.cpath: ", package.cpath)
+	}
+	
+	init_worker_by_lua_block {
+		local initer = require("init_worker")
+		initer.init_worker()
+	}
+    
+    server {
+		listen 9000;
+		listen 9002;
+		listen 9100-9105;
+		proxy_timeout 1h;
+		content_by_lua_block {
+			local pg_proxy = require "mysql_proxy_app"
+			pg_proxy.run()
+		}
+    }
+
+	server {
+        listen 2346;
+        content_by_lua_block {
+            local sock = ngx.req.socket(true)
+			local clientdata, err = sock:receiveany(81920)  -- 非阻塞读取
+            if clientdata then
+				local parser = require "parse_opcode_msg"
+				parser.parse_opcode_msg(sock, clientdata)
+            end
+        }
+    }
+
+	server {
+        listen 2000;
+        content_by_lua_block {
+			local utils = require "utils"
+			local url = "http://192.168.104.100:9900/list"
+			local params = { timeout = { connect = 1000, send = 1000, read = 6000}}
+			local responsedata, err = utils.send_http_request(url, "", params)
+			if responsedata ~= nil then
+				ngx.say(responsedata)
+			else
+				ngx.say(err)
+			end
+		}
+    }
+
+	server {
+        listen 2001;
+        content_by_lua_block {
+			local utils = require "utils"
+			local url = "https://192.168.104.100:9100/list"
+			local params = {timeout = { connect = 1000, send = 1000, read = 6000}}
+
+			local bodydata = utils.aes_encrypt("name:yuliang, age:10")
+			ngx.log(ngx.INFO, "encrypto data: ", bodydata)
+			local responsedata, err = utils.send_http_request(url, bodydata, params)
+			if responsedata ~= nil then
+				ngx.log(ngx.INFO, "responsedata: ", responsedata)
+				local bodydata = utils.aes_decrypt(responsedata)
+				ngx.log(ngx.INFO, "len(bodydata): ", #bodydata, ", bodydata: ", bodydata)
+				ngx.say(bodydata)
+			else
+				ngx.say(err)
+			end
+		}
+    }
+}

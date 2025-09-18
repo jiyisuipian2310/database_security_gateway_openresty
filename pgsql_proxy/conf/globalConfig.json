@@ -1,0 +1,14 @@
+{
+    "getdbAddressUrl":"http://127.0.0.1:3900/getdbAddress",
+    "sqlMaskUrl":"http://127.0.0.1:9109/message/api/analySql",
+    "accountLockUrl":"http://127.0.0.1:9109/message/api/userLock",
+    "localAddressIp":"127.0.0.1",
+    "auditLogPath":"{path}/pgsql_proxy/audit_logs",
+    "redisIp":"127.0.0.1",
+    "redisPort":6379,
+    "pgsql": {
+        "targetType":"13",
+        "app_log_path":"{path}/pgsql_proxy/app_logs",
+        "log_level": "info"
+    }
+}
