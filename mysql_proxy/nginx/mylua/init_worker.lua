@@ -2,7 +2,7 @@ local ngx = ngx
 local utils = require "utils"
 local cjson = require "cjson.safe"
 local auditlogs = require "mysql_audit_logs"
-local applogs = require "mysql_proxy_timer_logs"
+local loger = require "mysql_proxy_timer_logs"
 
 local _M = {}
 
@@ -15,17 +15,17 @@ local get_db_address_info = function (premature, arg)
     local requestTable = { targetType = globalCfg.mysql.targetType, proxyIp = globalCfg.localAddressIp}
     local requestData = cjson.encode(requestTable)
 
-    ngx.log(ngx.INFO, "init_worker requestUrl: ", globalCfg.getdbAddressUrl, ", requestData: ", requestData)
+    loger.add_info_log("init_worker requestUrl: %s,  requestData: %s",  globalCfg.getdbAddressUrl, requestData)
     local json_str, err = utils.send_http_request(globalCfg.getdbAddressUrl, requestData)
     if json_str == nil then
-        ngx.log(ngx.INFO, "get mysql address failed, err: ", err)
+        loger.add_error_log("get mysql address failed, err: %s",  err.Error())
         return
     end
 
-    ngx.log(ngx.INFO, "get mysql address, json_str: ", json_str)
+    loger.add_info_log("get mysql address, json_str: %s", json_str)
     local json_table, err = cjson.decode(json_str)
     if not json_table then
-        ngx.log(ngx.ERR, "parse mysql address failed: ", err)
+        loger.add_error_log("parse mysql address failed: ",  err.Error())
         return
     end
 
@@ -35,7 +35,7 @@ local get_db_address_info = function (premature, arg)
     for key, item in pairs(json_table) do
         if type(item) == "table" then
             local info = string.format("targetType[%s], vpPort[%s], targetAddr[%s:%d]", item.targetType, item.vpPort, item.targetIp, item.targetPort)
-            ngx.log(ngx.INFO, info)
+            loger.add_info_log("dbitem: %s", info)
 
             local item_targetType = ""
             if(type(item.targetType) == "number") then
@@ -46,7 +46,7 @@ local get_db_address_info = function (premature, arg)
 
             if item_targetType ~= globalCfg.mysql.targetType then
                 local errmsg = string.format("targetType not match mysql targetType(%d), skip, item: %s", globalCfg.mysql.targetType, info)
-                ngx.log(ngx.WARN, errmsg)
+                loger.add_warn_log(errmsg)
                 goto continue
             end
             -- 存入 redis 数据库中
@@ -64,7 +64,7 @@ function _M.init_worker()
     if ngx.worker.id() == 0 then
         ngx.timer.at(0, get_db_address_info, arg)
         auditlogs.init()
-        applogs.init()
+        loger.init()
     end
 end
 

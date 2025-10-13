@@ -3,6 +3,7 @@ local string = string
 local cjson = require "cjson.safe"
 local redis = require "resty.redis"
 local utils = require "utils"
+local loger = require "mysql_proxy_timer_logs"
 
 local _M = {}
 
@@ -26,9 +27,9 @@ local function deal_unlock_account_msg(json_table)
         red:hset(loginUuid, "CurrentLoginFailedCount", 0)
         lock:unlock()
 
-        ngx.log(ngx.INFO, "Unlock Account Success, loginUuid: ", loginUuid)
+        loger.add_info_log("Unlock Account Success, loginUuid: %s", loginUuid)
     else
-        ngx.log(ngx.WARN, "Unlock Account Failed, loginUuid: ", loginUuid, " not exists in redis")
+        loger.add_warn_log("Unlock Account Failed, loginUuid: %s not exists in redis", loginUuid)
     end
 
     red:set_keepalive(30000, 200) -- 将连接放回连接池
@@ -55,9 +56,9 @@ local function deal_lock_account_msg(json_table)
         red:hset(loginUuid, "CurrentLoginFailedCount", 99999)
         lock:unlock()
 
-        ngx.log(ngx.INFO, "Lock Account Success, loginUuid: ", loginUuid)
+        loger.add_info_log("Lock Account Success, loginUuid: %s", loginUuid)
     else
-        ngx.log(ngx.WARN, "Lock Account Failed, loginUuid: ", loginUuid, " not exists in redis")
+        loger.add_warn_log("Lock Account Failed, loginUuid: %s not exists in redis", loginUuid)
     end
 
     red:set_keepalive(30000, 200) -- 将连接放回连接池
@@ -80,10 +81,10 @@ local function deal_add_db_control_policy_msg(json_table)
             )
 
             if not res then
-                ngx.log(ngx.ERR, "Failed to set data: ", err, ", configData:", msg)
+                loger.add_warn_log("Add configData Failed: %s, reason: ", msg, err)
                 goto continue
             else
-               ngx.log(ngx.INFO, "Successed Add configData [", msg, "]")
+               loger.add_info_log("Add configData Success: %s", msg)
             end
         end
         ::continue::
@@ -100,15 +101,15 @@ local function deal_delete_db_control_policy_msg(json_table)
 
     for key, item in pairs(json_table) do
         if type(item) == "table" then
-            -- local msg = string.format("vpPort: %s, targetIp: %s, targetPort: %s", item.vpPort, item.targetIp, item.targetPort)
+            local msg = string.format("vpPort: %s, targetIp: %s, targetPort: %s", item.vpPort, item.targetIp, item.targetPort)
 
             local dbuniqueID = item.targetIp.."#"..item.targetPort.."#"..item.vpPort
             local res, err = red:del(dbuniqueID)
             if not res then
-                ngx.log(ngx.ERR, "Failed to Delete Item: ", err, ", dbuniqueID:", dbuniqueID)
+                loger.add_warn_log("Delete configData Failed: %s, dbuniqueID: %s, reason: %s", msg, dbuniqueID, err)
                 goto continue
             else
-               ngx.log(ngx.INFO, "Delete Item Success , dbuniqueID:", dbuniqueID)
+               loger.add_info_log("Delete configData Success: %s, dbuniqueID: %s", msg, dbuniqueID)
             end
         end
         ::continue::
@@ -135,10 +136,10 @@ local function deal_update_db_control_policy_msg(json_table)
             )
 
             if not res then
-                ngx.log(ngx.ERR, "Failed to set data: ", err, ", configData:", msg)
+                loger.add_warn_log("Update configData Failed: %s, dbuniqueID: %s, reason: %s", msg, dbuniqueID, err)
                 goto continue
             else
-               ngx.log(ngx.INFO, "Successed Update configData [", msg, "]")
+               loger.add_info_log("Update configData Success: %s, dbuniqueID: %s", msg, dbuniqueID)
             end
         end
         ::continue::
@@ -169,7 +170,7 @@ local function deal_get_db_current_config_info_msg(sock, json_table)
     red:set_keepalive(30000, 200)
 
     local responseMsg = cjson.encode(responseTable)
-    ngx.log(ngx.INFO, "dbConfigInfo: ", responseMsg)
+    loger.add_info_log("dbConfigInfo: %s", responseMsg)
 
 	sock:send(responseMsg)
     return nil
@@ -192,7 +193,7 @@ function _M.parse_opcode_msg(sock, msg)
     elseif json_table.opcode == "get_db_current_config_info" then
         return deal_get_db_current_config_info_msg(sock, json_table)
     else
-        ngx.log(ngx.INFO, "the opcode is not supported, opcode: ", json_table.opcode)
+        loger.add_error_log("The opcode is not supported, opcode: : %s", json_table.opcode)
         return nil
     end
 end
