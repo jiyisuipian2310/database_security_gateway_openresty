@@ -137,9 +137,9 @@ function _M.send_http_request(url, body, params)
 
     local res, err = nil, nil
     if string.sub(url, 1, 5) == "https" then
-        res, err = httpc:request_uri(url, {method = "POST", body = body, ssl_verify = false})
+        res, err = httpc:request_uri(url, {method = "POST", body = body, ssl_verify = false, headers = {["Content-Type"] = "application/json"}})
     else
-        res, err = httpc:request_uri(url, {method = "POST", body = body})
+        res, err = httpc:request_uri(url, {method = "POST", body = body, headers = {["Content-Type"] = "application/json"}})
     end
     
     if not res then
