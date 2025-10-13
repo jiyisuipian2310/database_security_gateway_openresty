@@ -128,19 +128,31 @@ local function parse_startup_message(client_sock, clientdata, backend_sock)
     local separator = "__"
     local startpos, stoppos = meta.database:find(separator, 0, true) -- 从位置0开始查找__, true表示禁用正则匹配
     if startpos == nil or stoppos == nil then
-        red:select(15)
-        local get_main_account_failed_msg = red:get("pgsql_get_main_account_failed_msg")
-        client_sock:send(get_main_account_failed_msg)
+        if globalCfg.pgsql_get_main_account_failed_msg == nil then
+            red:select(15)
+            globalCfg.pgsql_get_main_account_failed_msg = red:get("pgsql_get_main_account_failed_msg")
+            client_sock:send(globalCfg.pgsql_get_main_account_failed_msg)
+        else
+            client_sock:send(globalCfg.pgsql_get_main_account_failed_msg)
+        end
+        
         loger.add_warn_log("parse_startup_message, parse masterAccount failed, by %s, %s",separator, meta.routeinfo)
+        red:set_keepalive(30000, 200)
         return 1, nil
     end
 
     local masterAccount = meta.database:sub(startpos+2)
     if masterAccount == nil or masterAccount == "" then
-        red:select(15)
-        local get_main_account_failed_msg = red:get("pgsql_get_main_account_failed_msg")
-        client_sock:send(get_main_account_failed_msg)
+        if globalCfg.pgsql_get_main_account_failed_msg == nil then
+            red:select(15)
+            globalCfg.pgsql_get_main_account_failed_msg = red:get("pgsql_get_main_account_failed_msg")
+            client_sock:send(globalCfg.pgsql_get_main_account_failed_msg)
+        else
+            client_sock:send(globalCfg.pgsql_get_main_account_failed_msg)
+        end
+
         loger.add_warn_log("parse_startup_message, parse masterAccount failed, masterAccount is nil or empty, %s", meta.routeinfo)
+        red:set_keepalive(30000, 200)
         return 1, nil
     end
 
@@ -174,14 +186,18 @@ local function parse_startup_message(client_sock, clientdata, backend_sock)
             local MaxLoginFailedLimit = red:hget(dbuniqueID, "MaxLoginFailedLimit")
             local loginFailedCount, _ = red:hget(loginUuid, "CurrentLoginFailedCount")
             loger.add_info_log("parse_startup_message, dbuniqueID: %s, loginFailedCount: %s, MaxLoginFailedLimit: %s", dbuniqueID, loginFailedCount, MaxLoginFailedLimit)
-            if tonumber(loginFailedCount) >= tonumber(MaxLoginFailedLimit) then
-                loger.add_error_log("parse_startup_message, loginFailedCount(%d) > MaxLoginFailedLimit(%d), loginUuid: %s", loginFailedCount, MaxLoginFailedLimit, loginUuid)
-
-                red:select(15)
-                local reach_max_login_failures_msg = red:get("pgsql_reach_max_login_failures_msg")
-                client_sock:send(reach_max_login_failures_msg)
+            if MaxLoginFailedLimit ~= nil and MaxLoginFailedLimit ~= "" and tonumber(loginFailedCount) >= tonumber(MaxLoginFailedLimit) then
+                if globalCfg.pgsql_reach_max_login_failures_msg == nil then
+                    red:select(15)
+                    globalCfg.pgsql_reach_max_login_failures_msg = red:get("pgsql_reach_max_login_failures_msg")
+                    client_sock:send(globalCfg.pgsql_reach_max_login_failures_msg)
+                else
+                    client_sock:send(globalCfg.pgsql_reach_max_login_failures_msg)
+                end
+                
                 red:set_keepalive(30000, 200)
                 send_lock_account_message(client_sock, MaxLoginFailedLimit)
+                loger.add_error_log("parse_startup_message, loginFailedCount(%d) > MaxLoginFailedLimit(%d), loginUuid: %s", loginFailedCount, MaxLoginFailedLimit, loginUuid)
                 return 1, nil
             end
         end
@@ -191,13 +207,17 @@ local function parse_startup_message(client_sock, clientdata, backend_sock)
     if dbUniqueIDExist == 1 then
         local currentConnCount = utils.get_counter(dbuniqueID)
         local connLimit, _ = red:hget(dbuniqueID, "MaxConnectLimit")
-        if currentConnCount > tonumber(connLimit) then
-            loger.add_error_log("parse_startup_message, currentConnCount(%d) > connLimit(%s)", currentConnCount, connLimit)
-
-            red:select(15)
-            local reach_max_connection_limit_msg = red:get("pgsql_reach_max_connection_limit_msg")
-            client_sock:send(reach_max_connection_limit_msg)
+        if connLimit ~= nil and connLimit ~= "" and currentConnCount > tonumber(connLimit) then
+            if globalCfg.pgsql_reach_max_connection_limit_msg == nil then
+                red:select(15)
+                globalCfg.pgsql_reach_max_connection_limit_msg = red:get("pgsql_reach_max_connection_limit_msg")
+                client_sock:send(globalCfg.pgsql_reach_max_connection_limit_msg)
+            else
+                client_sock:send(globalCfg.pgsql_reach_max_connection_limit_msg)
+            end
+            
             red:set_keepalive(30000, 200)
+            loger.add_error_log("parse_startup_message, currentConnCount(%d) > connLimit(%s)", currentConnCount, connLimit)
             return 1, nil
         end
     end
@@ -251,7 +271,18 @@ local function parse_query_message(client_sock, clientdata, backend_sock)
     -- 系统sql判断，如果判断为系统sql，则不脱敏，不审计
     local isSysSql, reason = match_system_sql(opSql)
     if isSysSql == true then
-        loger.add_debug_log("parse_query_message, SystemSql: %s, Reason: %s, %s\n", opSql, reason,meta.routeinfo)
+        local schema = ""
+        if string.find(opSql, "pg_matviews") then
+            schema = opSql:match("WHERE%s+[^=]+%.schemaname%s*=%s*'([^']+)'")
+        end
+
+        if schema ~= "" then
+            loger.add_info_log("parse_query_message, schema: %s, SystemSql: %s, Reason: %s, %s\n", schema, opSql, reason, meta.routeinfo)
+            utils.attach_metadata(client_sock, { schema = schema })
+        else
+            loger.add_debug_log("parse_query_message, SystemSql: %s, Reason: %s, %s\n", opSql, reason, meta.routeinfo)
+        end
+
         meta.querySql = nil
         return 0, nil
     end
@@ -285,10 +316,15 @@ local function parse_query_message(client_sock, clientdata, backend_sock)
     elseif status == 3 then -- 3:阻断当前操作，不转发到后端数据库
         local red, _ = utils.get_redis("parse_query_message", 15)
         if red ~= nil then
-            local reject_operation_msg = red:get("pgsql_reject_operation_msg")
-            local ready_for_query_msg = red:get("pgsql_ready_for_query_msg")
-            client_sock:send(reject_operation_msg)
-            client_sock:send(ready_for_query_msg)
+            if globalCfg.pgsql_reject_operation_msg == nil then
+                globalCfg.pgsql_reject_operation_msg = red:get("pgsql_reject_operation_msg")
+                globalCfg.pgsql_ready_for_query_msg = red:get("pgsql_ready_for_query_msg")
+                client_sock:send(globalCfg.pgsql_reject_operation_msg)
+                client_sock:send(globalCfg.pgsql_ready_for_query_msg)
+            else
+                client_sock:send(globalCfg.pgsql_reject_operation_msg)
+                client_sock:send(globalCfg.pgsql_ready_for_query_msg)
+            end
             return 1, nil
         else
             return 0, nil  -- 其他的未知状态码原样转发到后端数据库
@@ -312,8 +348,8 @@ local function forward_data_to_server(client_sock, backend_sock)
             break
         end
 		
-		-- local binarydata = utils.print_binary(clientdata)
-        -- loger.add_debug_log("forward_data_to_server, receive data: %s", binarydata)
+		local binarydata = utils.print_binary(clientdata)
+        loger.add_debug_log("forward_data_to_server, receive data: %s", binarydata)
         local msgtype = clientdata:byte(1)
         utils.attach_metadata(client_sock, { clientMsgType = msgtype} )
         if #clientdata >= 8 then

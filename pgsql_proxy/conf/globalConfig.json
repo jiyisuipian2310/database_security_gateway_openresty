@@ -1,5 +1,5 @@
 {
-    "getdbAddressUrl":"http://127.0.0.1:3900/getdbAddress",
+    "getdbAddressUrl":"http://127.0.0.1:3900/message/api/getSipTunnel",
     "sqlMaskUrl":"http://127.0.0.1:9109/message/api/analySql",
     "accountLockUrl":"http://127.0.0.1:9109/message/api/userLock",
     "localAddressIp":"127.0.0.1",

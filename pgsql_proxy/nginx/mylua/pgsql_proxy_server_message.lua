@@ -21,7 +21,7 @@ local function record_pgsql_audit_log(meta)
         targetIp = meta.targetIp,
         targetPort = meta.targetPort,
         eventCreateTime = ngx.localtime(),
-        targetServiceName = (meta.database ~= nil) and string.lower(meta.database) or "nil",
+        targetServiceName = (meta.schema ~= nil) and meta.schema or "",
         command = string.match(meta.querySql, "(%S+)"),
         tableName = "",
         dbType = "pgsql",
