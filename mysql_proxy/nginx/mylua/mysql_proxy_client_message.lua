@@ -144,7 +144,8 @@ local function parse_mysql_login_message(client_sock, backend_sock, clientdata)
             local MaxLoginFailedLimit = red:hget(dbuniqueID, "MaxLoginFailedLimit")
             local loginFailedCount, _ = red:hget(loginUuid, "CurrentLoginFailedCount")
             loger.add_info_log("parse_mysql_login_message, dbuniqueID: %s, loginFailedCount: %s, MaxLoginFailedLimit: %s", dbuniqueID, loginFailedCount, MaxLoginFailedLimit)
-            if tonumber(loginFailedCount) >= tonumber(MaxLoginFailedLimit) then
+
+            if MaxLoginFailedLimit ~= nil and MaxLoginFailedLimit ~= "" and tonumber(loginFailedCount) >= tonumber(MaxLoginFailedLimit) then
                 loger.add_error_log("parse_mysql_login_message, loginFailedCount(%d) > MaxLoginFailedLimit(%d), loginUuid: %s", loginFailedCount, MaxLoginFailedLimit, loginUuid)
                 red:set_keepalive(30000, 200)
                 client_sock:send(mysql_const_data.reach_max_login_failures_msg)
@@ -158,7 +159,7 @@ local function parse_mysql_login_message(client_sock, backend_sock, clientdata)
     if dbUniqueIDExist == 1 then
         local currentConnCount = utils.get_counter(dbuniqueID)
         local connLimit, _ = red:hget(dbuniqueID, "MaxConnectLimit")
-        if currentConnCount > tonumber(connLimit) then
+        if connLimit ~= nil and connLimit ~= "" and currentConnCount > tonumber(connLimit) then
             loger.add_error_log("parse_mysql_login_message, currentConnCount(%d) > connLimit(%s)", currentConnCount, connLimit)
             red:set_keepalive(30000, 200)
             client_sock:send(mysql_const_data.reach_max_connection_limit_msg)

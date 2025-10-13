@@ -36,7 +36,15 @@ local get_db_address_info = function (premature, arg)
         if type(item) == "table" then
             local info = string.format("targetType[%s], vpPort[%s], targetAddr[%s:%d]", item.targetType, item.vpPort, item.targetIp, item.targetPort)
             ngx.log(ngx.INFO, info)
-            if item.targetType ~= globalCfg.mysql.targetType then
+
+            local item_targetType = ""
+            if(type(item.targetType) == "number") then
+                item_targetType = tostring(item.targetType)
+            else
+                item_targetType = item.targetType
+            end
+
+            if item_targetType ~= globalCfg.mysql.targetType then
                 local errmsg = string.format("targetType not match mysql targetType(%d), skip, item: %s", globalCfg.mysql.targetType, info)
                 ngx.log(ngx.WARN, errmsg)
                 goto continue

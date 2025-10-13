@@ -1,7 +1,7 @@
 {
+    "getdbAddressUrl":"http://127.0.0.1:3900/message/api/getSipTunnel",
     "sqlMaskUrl":"http://127.0.0.1:9109/message/api/analySql",
     "accountLockUrl":"http://127.0.0.1:9109/message/api/userLock",
-    "getdbAddressUrl":"http://127.0.0.1:3901/getdbAddress",
     "localAddressIp":"127.0.0.1",
     "auditLogPath":"{path}/mysql_proxy/audit_logs",
     "redisIp":"127.0.0.1",
