@@ -177,7 +177,7 @@ local function deal_get_db_current_config_info_msg(sock, json_table)
 end
 
 function _M.parse_opcode_msg(sock, msg)
-    ngx.log(ngx.INFO, "Body: ", msg)
+    loger.add_error_log("parse_opcode_msg, http Body: %s", msg)
 
     local json_table, err = cjson.decode(msg)
     if json_table.opcode == "unlock_account" then

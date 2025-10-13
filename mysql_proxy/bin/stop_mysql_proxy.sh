@@ -7,7 +7,7 @@ C_END="\e[0m"
 mysql_proxy_dir="{path}/mysql_proxy"
 
 if [ ! -f "$mysql_proxy_dir/nginx/logs/nginx.pid" ];then
-    echo -e "Message: ${C_RED}mysql_proxy isn't running, please start it first !${C_END}"
+    echo -e "Message: ${C_GREEN}stop mysql_proxy success !${C_END}"
     exit 1
 fi
 
