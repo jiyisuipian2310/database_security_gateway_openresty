@@ -180,6 +180,103 @@ local function parse_mysql_login_failed_message(client_sock, backend_sock, backe
 end
 
 local function parse_mysql_downstream_data(client_sock, backenddata)
+    local meta = utils.get_metadata(client_sock)
+    if meta.querySql == nil or meta.querySql == "" then
+        return false
+    end
+
+    local last_seven = string.sub(meta.querySql, -7)
+    if last_seven == "LIMIT 0" then
+        return false
+    end
+
+    -- local data = utils.print_binary(backenddata)
+    -- loger.add_warn_log("parse_mysql_downstream_data, data: %s", data)
+
+    local offset = 1
+    local total_data_length = #backenddata
+    local mysql_protocol_total_length = utils.unpack_little_endian(backenddata, offset, 3)
+
+    local column_name_count = backenddata:byte(offset + 4) -- 3 bytes length and 1 bytes pkt serial Number
+    if column_name_count == mysql_const_data.MYSQL_ERR_MARKER then
+        offset = offset + 4 + mysql_protocol_total_length + 2
+        local errmsg = backenddata:sub(offset)
+        loger.add_warn_log("parse_mysql_downstream_data, sqlFailed reason: %s, %s", errmsg, meta.prompt)
+        return true
+    end
+
+    -- loger.add_warn_log("begin parse_mysql_downstream_data, column_name_count: %d", column_name_count)
+
+    if column_name_count == mysql_const_data.MYSQL_OK_MARKER then
+        return true
+    end
+
+    local all_columns_name = ""
+
+    -- offsetbak save next mysql protocol pkt position
+    offset = offset + 4 + mysql_protocol_total_length
+    local offsetbak = offset
+
+    local skiploop = false
+    while skiploop == false and offsetbak < total_data_length do
+        offset = offsetbak
+        -- skip next mysql protocol pkt
+        mysql_protocol_total_length = utils.unpack_little_endian(backenddata, offset, 3)
+        -- loger.add_warn_log("begin parse_mysql_downstream_data, mysql_protocol_total_length: %d", mysql_protocol_total_length)
+
+        offsetbak = offset + 4 + mysql_protocol_total_length
+
+        -- skip 3 bytes length and 1 bytes pkt serial Number
+        offset = offset + 4
+
+        local field_length = backenddata:byte(offset)
+        if field_length == mysql_const_data.MYSQL_EOF_MARKER then
+            skiploop = true
+            loger.add_warn_log("begin parse_mysql_downstream_data, stop while")
+            goto continue
+        end
+
+        -- skip Catalog(def)
+        local catalog_name = backenddata:sub(offset + 1, offset + 1 + field_length - 1)
+        -- loger.add_warn_log("Catalog field length: %d, catalog_name: %s(length: %d)", field_length, catalog_name, #catalog_name)
+        offset = offset + 1 + field_length
+
+        -- skip database
+        field_length = backenddata:byte(offset)
+        local database_name = backenddata:sub(offset+1, offset+1 + field_length - 1)
+        -- loger.add_warn_log("database field length: %d, database_name: %s(length: %d)", field_length, database_name, #database_name)
+        offset = offset + 1 + field_length
+        
+        -- skip table
+        field_length = backenddata:byte(offset)
+        local table_name = backenddata:sub(offset+1, offset + 1 + field_length - 1)
+        -- loger.add_warn_log("table field length: %d, table_name: %s(length: %d)", field_length, table_name, #table_name)
+        offset = offset + 1 + field_length
+
+        -- skip origin table
+        field_length = backenddata:byte(offset)
+        local origin_table_name = backenddata:sub(offset+1, offset + 1 + field_length - 1)
+        -- loger.add_warn_log("origin table field length: %d, origin_table_name: %s(length: %d)", field_length, origin_table_name, #origin_table_name)
+        offset = offset + 1 + field_length
+
+        -- get column name
+        field_length = backenddata:byte(offset)
+        offset = offset + 1
+        local column_name = backenddata:sub(offset, offset + field_length - 1)
+        -- loger.add_info_log("column name field length: %d, column_name: %s(length: %d)", field_length, column_name, #column_name)
+        column_name_count = column_name_count - 1
+        if column_name_count == 0 then
+            all_columns_name = all_columns_name .. column_name
+            skiploop = true
+        else
+            all_columns_name = all_columns_name .. column_name .. "<|>"
+        end
+        
+        ::continue::
+    end
+
+    utils.attach_metadata(client_sock, { downdata = all_columns_name })
+    -- loger.add_info_log("all_columns_name: %s", meta.downdata)
     return true
 end
 
