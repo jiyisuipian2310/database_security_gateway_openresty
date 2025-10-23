@@ -89,7 +89,7 @@ local function parse_mysql_login_message(client_sock, backend_sock, clientdata)
     local login_user_zero_pos = clientdata:find("\0", offset, true)
     if login_user_zero_pos == nil then
         local binarydata = utils.print_binary(clientdata)
-        loger.add_warn_log("routeInfo: %s, clientdata: %s", meta.routeInfo, binarydata)
+        loger.add_warn_log("parse_mysql_login_message, routeInfo: %s, clientdata: %s", meta.routeInfo, binarydata)
         return false
     end
 

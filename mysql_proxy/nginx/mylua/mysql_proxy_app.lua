@@ -24,13 +24,13 @@ function _M.run()
     if addressTable == nil then
         local red = utils.get_redis("apprun", 14)
         if red == nil then
-            loger.add_error_log("address_key(%d) not in redis and get_redis failed", address_key)
+            loger.add_error_log("address_key(%s) not in redis and get_redis failed", address_key)
             return
         end
 
         local exists, _ = red:exists(address_key)
         if exists ~= 1 then
-            loger.add_error_log("address_key(%d) not in redis and not in lrucache", address_key)
+            loger.add_error_log("address_key(%s) not in redis and not in lrucache", address_key)
             return
         end
 
